@@ -227,7 +227,7 @@ def test_not_pattern():
 
 
 def test_type_pattern():
-    assert wildcard().has_type(rx.DynTensorType(2, "float32")).match(bindings[0].var)
+    assert wildcard().has_type(rx.TensorType(2, "float32")).match(bindings[0].var)
 
 
 def test_dtype_pattern():
@@ -283,8 +283,8 @@ def test_op_attr():
     yp = is_var("y")
     # TODO(@yuchen): reenable the assert after figuring out why it fails
     # assert is_op("nn.conv2d")(xp, yp).has_attr({"strides": [3, 3]}).match(conv2d)
-    assert not is_op("nn.conv2d")(xp, yp).has_attr({"strides": [4, 3]}).match(conv2d)
-    assert not is_op("nn.conv2d")(xp, yp).has_attr({"strides": [3, 3]}).match(conv2d)
+    assert not is_op("relax.nn.conv2d")(xp, yp).has_attr({"strides": [4, 3]}).match(conv2d)
+    assert not is_op("relax.nn.conv2d")(xp, yp).has_attr({"strides": [3, 3]}).match(conv2d)
 
 
 def test_match_call_attr():
@@ -486,7 +486,7 @@ class SmallParallel:
 
 
 def test_distinguish_diamond_and_parallel():
-    # relay pattern lang cannot distinguish the two cases above.
+    # pattern lang cannot distinguish the two cases above.
     diamond = SmallDiamond["main"].body.blocks[0]
     parallel = SmallParallel["main"].body.blocks[0]
 

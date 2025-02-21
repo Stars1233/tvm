@@ -456,7 +456,7 @@ DEFAULT_TEST_TARGETS = [
     "nvptx",
     "vulkan -from_device=0",
     "opencl",
-    "opencl -device=mali,aocl_sw_emu",
+    "opencl -device=mali",
     "opencl -device=intel_graphics",
     "metal",
     "rocm",
@@ -1022,9 +1022,6 @@ requires_aprofile_aem_fvp = Feature(
     compile_time_check=_aprofile_aem_fvp_compile_time_check,
 )
 
-# Mark a test as requiring Vitis AI to run
-requires_vitis_ai = Feature("vitis_ai", "Vitis AI", cmake_flag="USE_VITIS_AI")
-
 
 # check cpu features
 def _has_cpu_feat(features):
@@ -1119,6 +1116,39 @@ slow = pytest.mark.skipif(
     SKIP_SLOW_TESTS,
     reason="Skipping slow test since the SKIP_SLOW_TESTS environment variable is 'true'",
 )
+
+
+def requires_llvm_minimum_version(major_version):
+    """Mark a test as requiring at least a specific version of LLVM.
+
+    Unit test marked with this decorator will run only if the
+    installed version of LLVM is at least `major_version`.
+
+    This also marks the test as requiring LLVM backend support.
+
+    Parameters
+    ----------
+    major_version: int
+
+
+    """
+
+    try:
+        llvm_version = tvm.target.codegen.llvm_version_major()
+    except RuntimeError:
+        llvm_version = 0
+
+    requires = [
+        pytest.mark.skipif(
+            llvm_version < major_version, reason=f"Requires LLVM >= {major_version}"
+        ),
+        *requires_llvm.marks(),
+    ]
+
+    def inner(func):
+        return _compose([func], requires)
+
+    return inner
 
 
 def requires_nvcc_version(major_version, minor_version=0, release_version=0):
@@ -2186,25 +2216,3 @@ class CompareBeforeAfter:
                 f"or an instance of `tvm.tir.PrimFunc`.  "
                 f"Instead, received {type(expected)}."
             )
-
-
-class _control_span_filling:
-    def __init__(self, on=True):
-        self._on = on
-        self._pass_ctx = tvm.transform.PassContext(config={"relay.frontend.fill_span": self._on})
-
-    def __enter__(self):
-        self._pass_ctx.__enter__()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._pass_ctx.__exit__(exc_type, exc_val, exc_tb)
-
-
-class enable_span_filling(_control_span_filling):
-    def __init__(self):
-        super().__init__()
-
-
-class disable_span_filling(_control_span_filling):
-    def __init__(self):
-        super().__init__(on=False)

@@ -19,11 +19,11 @@
 import tvm._ffi
 
 from . import _ffi_api
-from .expr import RelayExpr
+from .expr import RelaxExpr
 
 
 @tvm._ffi.register_object("Op")
-class Op(RelayExpr):
+class Op(RelaxExpr):
     """Primitive operator in the IR."""
 
     def __init__(self):
@@ -100,34 +100,6 @@ class Op(RelayExpr):
             The attribute name
         """
         _ffi_api.OpResetAttr(self, attr_name)
-
-    def add_type_rel(self, rel_name, type_rel_func=None):
-        """Attach the type function corresponding to the return type.
-
-        Parameters
-        ----------
-        rel_name : str
-            The type relation name to register.
-
-        type_rel_func : Optional[function (args: List[Type], attrs: Attrs) -> Type]
-            The backing relation function which can solve an arbitrary relation on variables.
-            Differences with type_rel_func in C++:
-
-            1) When type_rel_func is not None
-
-               a) OpAddTypeRel on C++ side will adjust type_rel_func with TypeReporter to
-                  calling convention of relay type system.
-
-               b) type_rel_func returns output argument's type, return None means can't
-                  infer output's type.
-
-               c) only support single output operators for now, the last argument is output tensor.
-
-            2) when type_rel_func is None, will call predefined type_rel_funcs in relay
-                   according to ``tvm.relay.type_relation.`` + rel_name.
-
-        """
-        _ffi_api.OpAddTypeRel(self, rel_name, type_rel_func)
 
     def add_argument(self, name, type, description):  # pylint: disable=redefined-builtin
         """Add arguments information to the function.

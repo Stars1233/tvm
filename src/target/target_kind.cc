@@ -288,7 +288,6 @@ TVM_REGISTER_TARGET_KIND("llvm", kDLCPU)
     .set_default_keys({"cpu"})
     // Force the external codegen kind attribute to be registered, even if no external
     // codegen targets are enabled by the TVM build.
-    .set_attr<runtime::Bool>(tvm::attr::kIsExternalCodegen, runtime::Bool(false))
     .set_target_parser(tvm::target::parsers::cpu::ParseTarget);
 
 // Note regarding the "cl-opt" attribute:
@@ -425,15 +424,6 @@ TVM_REGISTER_TARGET_KIND("vulkan", kDLVulkan)
 TVM_REGISTER_TARGET_KIND("webgpu", kDLWebGPU)
     .add_attr_option<runtime::Int>("max_num_threads", runtime::Int(256))
     .set_default_keys({"webgpu", "gpu"});
-
-TVM_REGISTER_TARGET_KIND("sdaccel", kDLOpenCL)  // line break
-    .set_default_keys({"sdaccel", "hls"});
-
-TVM_REGISTER_TARGET_KIND("aocl", kDLAOCL)  // line break
-    .set_default_keys({"aocl", "hls"});
-
-TVM_REGISTER_TARGET_KIND("aocl_sw_emu", kDLAOCL)  // line break
-    .set_default_keys({"aocl", "hls"});
 
 TVM_REGISTER_TARGET_KIND("hexagon", kDLHexagon)
     .add_attr_option<Array<String>>("mattr")
