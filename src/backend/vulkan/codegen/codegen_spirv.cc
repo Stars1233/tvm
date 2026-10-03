@@ -75,6 +75,8 @@ const VarNode* AsBufferVarNode(const Expr& expr) {
 CodeGenSPIRV::CodeGenSPIRV(Target target) : spirv_support_(target) {}
 
 runtime::SPIRVShader CodeGenSPIRV::BuildFunction(const PrimFunc& f, const std::string& name) {
+  TVM_FFI_CHECK(f->body.has_value(), ValueError)
+      << "Kernel code generation requires a function body";
   this->InitFuncState();
   TVM_FFI_ICHECK(f->HasNonzeroAttr(tirx::attr::kNoAlias))
       << "SPIRV only takes restricted memory model";
@@ -137,7 +139,7 @@ runtime::SPIRVShader CodeGenSPIRV::BuildFunction(const PrimFunc& f, const std::s
       }
     }
   }
-  this->Dispatch(f->body);
+  this->Dispatch(f->body.value());
   builder_->SetLocalSize(func_ptr, workgroup_size_);
   builder_->MakeInst(spv::OpReturn);
   builder_->MakeInst(spv::OpFunctionEnd);
@@ -875,7 +877,7 @@ void CodeGenSPIRV::Dispatch_(const IfThenElseNode* op) {
   builder_->StartLabel(merge_label);
 }
 
-void CodeGenSPIRV::DispatchAllocBuffer(const BindNode* op, const CallNode* buffer_call) {
+void CodeGenSPIRV::DispatchAllocTensor(const BindNode* op, const CallNode* buffer_call) {
   tvm::Tuple shape = buffer_call->args[0].as_or_throw<tvm::Tuple>();
   DLDataType dtype = buffer_call->args[1].as_or_throw<DataTypeImm>()->value;
   ffi::String scope = buffer_call->args[2].as_or_throw<StringImm>()->value;
@@ -898,7 +900,10 @@ void CodeGenSPIRV::DispatchAllocBuffer(const BindNode* op, const CallNode* buffe
     case runtime::StorageRank::kWMMAMatrixA:
     case runtime::StorageRank::kWMMAMatrixB:
     case runtime::StorageRank::kWMMAAccumulator: {
-      TVM_FFI_ICHECK(fragment_info_.count(var_node));
+      auto shape = annotations->dict.Get(s_tir::attr::fragment_shape);
+      TVM_FFI_ICHECK(shape.has_value())
+          << "Cannot find shape of the wmma fragment " << buffer.name();
+      fragment_info_[var_node] = {shape.value().as_or_throw<ffi::String>()};
       fragment_info_[var_node].scope = scope;
       etype = GetFragmentSType(var_node, PrimType(dtype));
       storage_class = spv::StorageClassFunction;
@@ -942,7 +947,7 @@ void CodeGenSPIRV::DispatchAllocBuffer(const BindNode* op, const CallNode* buffe
   }
 }
 
-void CodeGenSPIRV::DispatchDeclBuffer(const BindNode* op, const CallNode* buffer_call) {
+void CodeGenSPIRV::DispatchDeclTensor(const BindNode* op, const CallNode* buffer_call) {
   Expr data = buffer_call->args[0];
   DLDataType dtype = buffer_call->args[2].as_or_throw<DataTypeImm>()->value;
   BufferVar buffer = op->var.as_or_throw<BufferVar>();
@@ -989,10 +994,6 @@ void CodeGenSPIRV::Dispatch_(const AttrStmtNode* op) {
         var_map_[iv->var.get()] = GetThreadIndex(iv, op->value.as_or_throw<PrimExpr>());
       }
     }
-  } else if (op->attr_key == s_tir::attr::fragment_shape) {
-    const VarNode* buffer = op->node.as<VarNode>();
-    const StringImmNode* shape_str = op->value.as<StringImmNode>();
-    fragment_info_[buffer] = {shape_str->value};
   }
   this->Dispatch(op->body);
 }
@@ -1003,8 +1004,8 @@ void CodeGenSPIRV::Dispatch_(const AssertStmtNode* op) {
 
 void CodeGenSPIRV::Dispatch_(const BindNode* op) {
   if (const auto* call = op->value.as<CallNode>(); call) {
-    if (call->op.same_as(tirx::builtin::alloc_buffer())) return DispatchAllocBuffer(op, call);
-    if (call->op.same_as(tirx::builtin::decl_buffer())) return DispatchDeclBuffer(op, call);
+    if (call->op.same_as(tirx::builtin::alloc_tensor())) return DispatchAllocTensor(op, call);
+    if (call->op.same_as(tirx::builtin::decl_tensor())) return DispatchDeclTensor(op, call);
   }
   TVM_FFI_ICHECK(!var_map_.count(op->var.get()));
   if (auto prim_type = op->var->ty.as<PrimType>()) {

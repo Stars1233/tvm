@@ -42,10 +42,10 @@ Type InferTypeBroadcast(const Call& call, const BlockBuilder& ctx, FType f_compu
 
   TVM_FFI_CHECK(lhs_ty.as<PrimTypeNode>() || lhs_ty.as<TensorTypeNode>(), TypeError)
       << "Arguments to binary operators must be either R.Tensor or R.Prim types, "
-      << "but expression " << call << " has LHS " << call->args[0] << ", which has Type " << lhs_ty;
+      << "but " << call->op << " has LHS type " << lhs_ty;
   TVM_FFI_CHECK(rhs_ty.as<PrimTypeNode>() || rhs_ty.as<TensorTypeNode>(), TypeError)
       << "Arguments to binary operators must be either R.Tensor or R.Prim types, "
-      << "but expression " << call << " has RHS " << call->args[1] << ", which has Type " << rhs_ty;
+      << "but " << call->op << " has RHS type " << rhs_ty;
 
   // Dtype
   ffi::Optional<PrimType> output_dtype = f_compute_out_dtype(call, ctx, lhs_ty, rhs_ty);
@@ -152,8 +152,8 @@ InferLayoutOutput InferLayoutBinaryEwise(
   TVM_FFI_ICHECK(!x1_ty->IsUnknownNdim() && !x2_ty->IsUnknownNdim())
       << "Unknown dim tensors should not be handled by this function";
 
-  ffi::Optional<ShapeExpr> shape1 = ffi::GetRef<ShapeExpr>(x1_ty->shape.as<ShapeExprNode>());
-  ffi::Optional<ShapeExpr> shape2 = ffi::GetRef<ShapeExpr>(x2_ty->shape.as<ShapeExprNode>());
+  ffi::Optional<ShapeExpr> shape1 = x1_ty->shape.as<ShapeExpr>();
+  ffi::Optional<ShapeExpr> shape2 = x2_ty->shape.as<ShapeExpr>();
   // Lets handle sub indexing as long as primal dims are matching
   if ((layout1->layout.ndim() != layout1->layout.ndim_primal()) ||
       (layout2->layout.ndim() != layout2->layout.ndim_primal())) {

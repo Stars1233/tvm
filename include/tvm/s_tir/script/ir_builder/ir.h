@@ -51,7 +51,8 @@ PrimFuncFrame DeclFunction(bool is_private = false, bool persistent = false);
  */
 BufferVar MatchBuffer(ffi::ObjectRef param, ffi::Array<PrimExpr> shape,
                       PrimType dtype = PrimType::Float(32), ffi::Optional<Expr> data = std::nullopt,
-                      ffi::Array<PrimExpr> strides = {}, PrimExpr elem_offset = PrimExpr(),
+                      ffi::Array<PrimExpr> strides = {},
+                      ffi::Optional<PrimExpr> elem_offset = std::nullopt,
                       ffi::String storage_scope = "global", int align = -1, int offset_factor = 0,
                       ffi::Optional<Layout> layout = std::nullopt,
                       ffi::Array<PrimExpr> allocated_addr = {});
@@ -110,7 +111,8 @@ void BlockAttrs(ffi::Map<ffi::String, ffi::Any> attrs);
  */
 BufferVar SBlockAllocBuffer(ffi::Array<PrimExpr> shape, PrimType dtype = PrimType::Float(32),
                             ffi::Optional<Expr> data = std::nullopt,
-                            ffi::Array<PrimExpr> strides = {}, PrimExpr elem_offset = PrimExpr(),
+                            ffi::Array<PrimExpr> strides = {},
+                            ffi::Optional<PrimExpr> elem_offset = std::nullopt,
                             ffi::String storage_scope = "", int align = -1, int offset_factor = 0,
                             ffi::Optional<Layout> layout = std::nullopt,
                             ffi::Array<PrimExpr> allocated_addr = {});
@@ -120,38 +122,42 @@ namespace axis {
 /*!
  * \brief The spatial block axis defining function.
  * \param dom The domain of the iteration variable.
- * \param binding The binding value of the iteration variable.
+ * \param binding The binding value, omitted only for a no_realize block.
  * \param dtype The data type of the iteration variable.
  * \return The iteration variable.
  */
-Var Spatial(Range dom, PrimExpr binding, PrimType dtype = PrimType::Int(32));
+Var Spatial(Range dom, ffi::Optional<PrimExpr> binding = std::nullopt,
+            PrimType dtype = PrimType::Int(32));
 
 /*!
  * \brief The reduced block axis defining function.
  * \param dom The domain of the iteration variable.
- * \param binding The binding value of the iteration variable.
+ * \param binding The binding value, omitted only for a no_realize block.
  * \param dtype The data type of the iteration variable.
  * \return The iteration variable.
  */
-Var Reduce(Range dom, PrimExpr binding, PrimType dtype = PrimType::Int(32));
+Var Reduce(Range dom, ffi::Optional<PrimExpr> binding = std::nullopt,
+           PrimType dtype = PrimType::Int(32));
 
 /*!
  * \brief The scanning block axis defining function.
  * \param dom The domain of the iteration variable.
- * \param binding The binding value of the iteration variable.
+ * \param binding The binding value, omitted only for a no_realize block.
  * \param dtype The data type of the iteration variable.
  * \return The iteration variable.
  */
-Var Scan(Range dom, PrimExpr binding, PrimType dtype = PrimType::Int(32));
+Var Scan(Range dom, ffi::Optional<PrimExpr> binding = std::nullopt,
+         PrimType dtype = PrimType::Int(32));
 
 /*!
  * \brief The opaque block axis defining function.
  * \param dom The domain of the iteration variable.
- * \param binding The binding value of the iteration variable.
+ * \param binding The binding value, omitted only for a no_realize block.
  * \param dtype The data type of the iteration variable.
  * \return The iteration variable.
  */
-Var Opaque(Range dom, PrimExpr binding, PrimType dtype = PrimType::Int(32));
+Var Opaque(Range dom, ffi::Optional<PrimExpr> binding = std::nullopt,
+           PrimType dtype = PrimType::Int(32));
 
 /*!
  * \brief The block axis remapping function.

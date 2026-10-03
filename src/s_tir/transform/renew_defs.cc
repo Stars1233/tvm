@@ -60,7 +60,7 @@ class RenewDefMutator : public StmtExprMutator {
       return mapped != nullptr ? mapped.as_or_throw<Var>() : generator->ReDefineVar(param);
     });
     // Visit body
-    Stmt body = generator->Mutate(func->body).ValueOrUnchanged(func->body);
+    auto body = generator->Mutate(func->body).ValueOrUnchanged(func->body);
     // Recreate function
     return PrimFunc(params, body, func->ret_type, func->attrs, func->span);
   }
@@ -144,8 +144,9 @@ class RenewDefMutator : public StmtExprMutator {
         Mutate(iter_var->dom->min, InplaceMode::kDisallow).ValueOrUnchanged(iter_var->dom->min);
     PrimExpr extent = Mutate(iter_var->dom->extent, InplaceMode::kDisallow)
                           .ValueOrUnchanged(iter_var->dom->extent);
-    IterVar new_iter_var(Range(min, extent), ReDefineVar(iter_var->var).as_or_throw<PrimVar>(),
-                         iter_var->iter_type, iter_var->thread_tag);
+    IterVar new_iter_var(Range::FromMinExtent(min, extent),
+                         ReDefineVar(iter_var->var).as_or_throw<PrimVar>(), iter_var->iter_type,
+                         iter_var->thread_tag);
     VarRemapSet(iter_var, new_iter_var);
     return new_iter_var;
   }

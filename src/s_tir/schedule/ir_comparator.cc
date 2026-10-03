@@ -22,8 +22,7 @@
 #include <tvm/ir/prim/builtin.h>
 #include <tvm/s_tir/stmt.h>
 #include <tvm/tirx/builtin.h>
-
-#include "../../tirx/analysis/check_contains.h"
+#include <tvm/tirx/stmt_functor.h>
 
 namespace tvm {
 
@@ -38,7 +37,15 @@ bool IsVScaleCall(const PrimExpr& expr) {
 
 // File-local helper: true if `expr` contains a call to prim::builtin::vscale().
 bool ContainsVscaleCall(const PrimExpr& expr) {
-  return tirx::CheckContains::ExprContains(expr, IsVScaleCall);
+  struct VScaleFinder : tirx::StmtExprVisitor {
+    ffi::Optional<VisitInterrupt> Visit(ffi::AnyView value) final {
+      if (auto expr = value.as<PrimExpr>(); expr && IsVScaleCall(*expr)) {
+        return VisitInterrupt();
+      }
+      return StmtExprVisitor::Visit(value);
+    }
+  };
+  return ffi::make_object<VScaleFinder>()->Visit(expr).has_value();
 }
 }  // namespace
 
@@ -424,11 +431,11 @@ bool TensorizeComparator::DefEqual(const Var& lhs, const Var& rhs) {
   auto rhs_prim_type = rhs->ty.as<PrimType>();
   if (!lhs_prim_type || !rhs_prim_type) {
     if (!ffi::StructuralEqual()(lhs->ty, rhs->ty)) return false;
-    equal_map_[lhs] = rhs;
+    equal_map_.insert_or_assign(lhs, rhs);
     return true;
   }
   // Otherwise remap lhs to rhs
-  equal_map_[lhs] = rhs;
+  equal_map_.insert_or_assign(lhs, rhs);
   // Cast if necessary. This allows the workload and the tensor intrin to have different dtypes in
   // the indices.
   analyzer_->Bind(lhs, cast(lhs_prim_type.value(), rhs.as_or_throw<PrimExpr>()));
@@ -507,7 +514,7 @@ bool TensorizeComparator::CompareBuffer(const BufferVar& lhs, const BufferVar& r
     equal = (*it).second.same_as(lhs);
   } else {
     // Remap the buffer variable definition without recursively comparing its
-    // BufferType.  Tensorization intentionally matches a region of a larger
+    // TensorType.  Tensorization intentionally matches a region of a larger
     // workload buffer against the intrinsic's smaller descriptor buffer.
     auto data_it = equal_map_.find(lhs.var());
     if (data_it != equal_map_.end()) {
@@ -515,11 +522,11 @@ bool TensorizeComparator::CompareBuffer(const BufferVar& lhs, const BufferVar& r
     } else {
       equal = lhs->dtype == rhs->dtype && lhs.scope() == rhs.scope();
       if (equal) {
-        equal_map_[lhs.var()] = rhs.var();
+        equal_map_.insert_or_assign(lhs.var(), rhs.var());
       }
     }
     if (equal) {
-      rhs_buffer_map_[rhs] = lhs;
+      rhs_buffer_map_.insert_or_assign(rhs, lhs);
     } else {
       if (assert_mode_) {
         std::ostringstream os;
@@ -788,12 +795,12 @@ bool AutoTensorizeComparator::CompareBuffer(const BufferVar& lhs, const BufferVa
     } else {
       equal = lhs->dtype == rhs->dtype;
       if (equal) {
-        equal_map_[lhs.var()] = rhs.var();
+        equal_map_.insert_or_assign(lhs.var(), rhs.var());
       }
     }
     if (equal) {
-      rhs_buffer_map_[rhs] = lhs;
-      lhs_buffer_map_[lhs] = rhs;
+      rhs_buffer_map_.insert_or_assign(rhs, lhs);
+      lhs_buffer_map_.insert_or_assign(lhs, rhs);
     }
   }
   return equal;

@@ -40,7 +40,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../../tirx/analysis/check_contains.h"
 #include "tvm/ffi/dtype.h"
 #include "tvm/tirx/expr.h"
 
@@ -90,8 +89,15 @@ bool TargetHasVLA(Target target) {
 }
 
 bool ContainsCallNode(const Stmt& stmt) {
-  return CheckContains::StmtContains(
-      stmt, [](const PrimExpr& expr) { return expr.as<CallNode>() != nullptr; });
+  struct CallFinder : StmtExprVisitor {
+    ffi::Optional<VisitInterrupt> Visit(ffi::AnyView value) final {
+      if (auto expr = value.as<PrimExpr>(); expr && expr->as<CallNode>()) {
+        return VisitInterrupt();
+      }
+      return StmtExprVisitor::Visit(value);
+    }
+  };
+  return ffi::make_object<CallFinder>()->Visit(stmt).has_value();
 }
 
 PrimType GetTextureElementType(const Expr& texture) {
@@ -305,14 +311,14 @@ class TryPredicateBufferAccesses : public StmtExprMutator {
   }
 
   /*! \brief The variable base expr of the predicate. */
-  PrimExpr base_;
+  PrimExpr base_{ffi::UnsafeInit{}};
   /*! \brief The lane stride of the predicate. */
-  PrimExpr stride_;
+  PrimExpr stride_{ffi::UnsafeInit{}};
   /*! \brief The lane count of the predicate. */
-  PrimExpr lanes_;
+  PrimExpr lanes_{ffi::UnsafeInit{}};
   /*! \brief The limit of the predicate. The expr specifies the upper bound of the base's
    * evaluated value. */
-  PrimExpr limit_;
+  PrimExpr limit_{ffi::UnsafeInit{}};
   /*! \brief Whether to predicate offset buffer accesses that use the same lane layout. */
   bool allow_offset_predication_;
   /*! \brief The number of buffer accesses in the stmt we will analyze. */
@@ -365,7 +371,7 @@ class VecAllocAccess : public StmtExprMutator {
     }
 
     // Find/make a BufferVar object with the correct updated shape.
-    BufferVar buf;
+    BufferVar buf{ffi::UnsafeInit{}};
     ffi::Any mapped = VarRemapGet(node->buffer);
     if (mapped != nullptr) {
       buf = mapped.as_or_throw<BufferVar>();
@@ -393,7 +399,7 @@ class VecAllocAccess : public StmtExprMutator {
       }
 
       // Copy everything into the new buffer.
-      auto type = CopyBufferType(node->buffer);
+      auto type = CopyTensorType(node->buffer);
       type->shape = shape;
       type->strides = strides;
       buf = RebuildBufferVar(node->buffer, std::move(type));
@@ -415,7 +421,7 @@ class VecAllocAccess : public StmtExprMutator {
   TensorLoad UpdateBufferAccess(TensorLoad node) {
     BufferVar buffer = node->source.as_or_throw<tvm::tirx::BufferVar>();
     if (buffer.get() != buf_) return node;
-    BufferVar buf;
+    BufferVar buf{ffi::UnsafeInit{}};
     auto mapped = VarRemapGet(buffer);
     if (mapped != nullptr) {
       buf = mapped.as_or_throw<BufferVar>();
@@ -428,7 +434,7 @@ class VecAllocAccess : public StmtExprMutator {
         if (i + 1 != strides.size()) stride *= var_lanes_;
         strides.Set(i, analyzer_->Simplify(stride));
       }
-      auto type = CopyBufferType(buffer);
+      auto type = CopyTensorType(buffer);
       type->shape = shape;
       type->strides = strides;
       buf = RebuildBufferVar(buffer, std::move(type));
@@ -1174,7 +1180,7 @@ class Vectorizer : public StmtExprMutator {
   // the lanes.
   PrimExpr var_lanes_;
   // ramp representing the var.
-  PrimExpr ramp_;
+  PrimExpr ramp_{ffi::UnsafeInit{}};
   // flag to mark requirment of scalarization.
   bool need_scalarize_{false};
   // vectorizable property
@@ -1189,14 +1195,15 @@ class Vectorizer : public StmtExprMutator {
     if (arr.size() == 0) return arr;
     int& lanes = *p_lanes;
     bool changed = false;
-    std::vector<PrimExpr> new_arr(arr.size());
+    std::vector<PrimExpr> new_arr;
+    new_arr.reserve(arr.size());
     for (size_t i = 0; i < arr.size(); i++) {
       PrimExpr old_elem = arr[i];
       auto new_elem_update = this->Mutate(old_elem);
       bool new_elem_unchanged = new_elem_update.UnchangedOrSameAs(old_elem);
       PrimExpr new_elem = std::move(new_elem_update).ValueOrUnchanged(old_elem);
       if (!new_elem_unchanged) changed = true;
-      new_arr[i] = new_elem;
+      new_arr.push_back(new_elem);
       lanes = std::max(lanes, new_elem.ty().lanes());
     }
 
@@ -1219,14 +1226,15 @@ class Vectorizer : public StmtExprMutator {
     if (arr.empty()) return arr;
     int& lanes = *p_lanes;
     bool changed = false;
-    std::vector<Expr> new_arr(arr.size());
+    std::vector<Expr> new_arr;
+    new_arr.reserve(arr.size());
     for (size_t i = 0; i < arr.size(); ++i) {
       const Expr& old_elem = arr[i];
       auto new_elem_update = this->Mutate(old_elem);
       bool new_elem_unchanged = new_elem_update.UnchangedOrSameAs(old_elem);
       Expr new_elem = std::move(new_elem_update).ValueOrUnchanged(old_elem);
       changed = changed || !new_elem_unchanged;
-      new_arr[i] = new_elem;
+      new_arr.push_back(new_elem);
       if (auto prim_elem = new_elem.as<PrimExpr>()) {
         lanes = std::max(lanes, prim_elem.value().ty().lanes());
       }
@@ -1319,7 +1327,15 @@ class LoopVectorizer : public StmtExprMutator {
       }
 
       if (!extent_as_int || extent_as_int->value < 1) {
-        bool is_scalable_expr = CheckContains::ExprContains(op->extent, IsVScaleCall);
+        struct VScaleFinder : StmtExprVisitor {
+          ffi::Optional<VisitInterrupt> Visit(ffi::AnyView value) final {
+            if (auto expr = value.as<PrimExpr>(); expr && IsVScaleCall(*expr)) {
+              return VisitInterrupt();
+            }
+            return StmtExprVisitor::Visit(value);
+          }
+        };
+        bool is_scalable_expr = ffi::make_object<VScaleFinder>()->Visit(op->extent).has_value();
         TVM_FFI_ICHECK(is_scalable_expr && TargetHasVLA(target_))
             << "Failed to vectorize loop with extent " << op->extent << " for target " << target_;
       }

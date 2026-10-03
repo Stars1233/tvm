@@ -290,8 +290,8 @@ TVM_FFI_STATIC_INIT_BLOCK() {
  *
  * For dynamic shapes, it is not always possible to infer the output
  * of a TIR PrimFunc from its inputs.  For example, a PrimFunc that
- * accepts input buffer `T.Buffer([16], "float32")` and output buffer
- * `T.Buffer([M, N], "float32")` infers the values of `M` and `N` from
+ * accepts input buffer `T.Tensor([16], "float32")` and output buffer
+ * `T.Tensor([M, N], "float32")` infers the values of `M` and `N` from
  * the shape of the provided output buffer.
  *
  * If the arguments provided are not compatible with the PrimFunc's
@@ -309,7 +309,7 @@ TVM_FFI_STATIC_INIT_BLOCK() {
  * \return The `arg_ty`, if it can be inferred from the arguments.
  *     Otherwise, std::nullopt.
  */
-static ffi::Optional<Type> InferCallTIROutputTypeFromArguments(
+ffi::Optional<Type> InferCallTIROutputTypeFromArguments(
     Type func_ty, Type arg_ty, ffi::Optional<ffi::Array<int64_t>> opt_inplace_indices) {
   auto opt_callee_ty = func_ty.as<FuncType>();
   TVM_FFI_CHECK(opt_callee_ty, TypeError)
@@ -825,8 +825,7 @@ void ValidateCallPyFunc(const CallNode* call) {
 
   TVM_FFI_ICHECK(arg_tuple.as<TupleNode>() || arg_tuple.as<VarNode>())
       << "Operation " << call->op << " must hold its arguments as an in-line tuple.  "
-      << "However, " << ffi::GetRef<Call>(call) << " has arguments " << arg_tuple
-      << ", which is neither an in-line tuple, "
+      << "However, the argument tuple is " << arg_tuple << ", which is neither an in-line tuple, "
       << "nor a variable binding that may be normalized to an in-line tuple.";
 }
 
@@ -1196,14 +1195,15 @@ Type InferTypeAllocateTensor(const Call& call, const BlockBuilder& ctx) {
 
 TVM_FFI_STATIC_INIT_BLOCK() {
   OpDef("relax.builtin.alloc_tensor")
-      .signature(sig::arg("shape", "The shape of the tensor to allocate."),
-                 sig::arg("dtype", "The dtype of the tensor to allocate."),
-                 sig::arg("runtime_device_index",
-                          "The device index indicating on which device the tensor is to be "
-                          "allocated at runtime. Index -1 is reserved for the host device."),
-                 sig::arg("storage_scope",
-                          "The storage scope of the storage to allocate. Default is global."),
-                 sig::var_ty_args("out_type", "Optional output type used by allocation rewrites."))
+      .signature(
+          sig::arg("shape", "The shape of the tensor to allocate."),
+          sig::arg("dtype", "The dtype of the tensor to allocate."),
+          sig::arg<IntExpr>("runtime_device_index",
+                            "The device index indicating on which device the tensor is to be "
+                            "allocated at runtime. Index -1 is reserved for the host device."),
+          sig::arg("storage_scope",
+                   "The storage scope of the storage to allocate. Default is global."),
+          sig::var_ty_args("out_type", "Optional output type used by allocation rewrites."))
       .set_attr<FInferTypeWithBuilder>("relax.FInferTypeWithBuilder", InferTypeAllocateTensor)
       // memory allocation isn't considered a "visible effect" as far as purity is concerned
       .set_attr<bool>("FPurity", true)
@@ -1278,13 +1278,14 @@ Type InferTypeMemAllocTensor(const Call& call, const BlockBuilder& ctx) {
 
 TVM_FFI_STATIC_INIT_BLOCK() {
   OpDef("relax.memory.alloc_tensor")
-      .signature(sig::arg("storage", "The storage to allocate the tensor to."),
-                 sig::arg("offset", "Storage offset to allocate the tensor."),
-                 sig::arg("shape", "The shape of the tensor to allocate."),
-                 sig::arg("dtype", "The dtype of the tensor to allocate."),
-                 sig::arg("runtime_device_index",
-                          "The device index indicating on which device the tensor is to be "
-                          "allocated at runtime. Index -1 is reserved for the host device."))
+      .signature(
+          sig::arg("storage", "The storage to allocate the tensor to."),
+          sig::arg<IntExpr>("offset", "Storage offset to allocate the tensor."),
+          sig::arg("shape", "The shape of the tensor to allocate."),
+          sig::arg("dtype", "The dtype of the tensor to allocate."),
+          sig::arg<IntExpr>("runtime_device_index",
+                            "The device index indicating on which device the tensor is to be "
+                            "allocated at runtime. Index -1 is reserved for the host device."))
       .set_attr<FInferTypeWithBuilder>("relax.FInferTypeWithBuilder", InferTypeMemAllocTensor)
       // memory allocation isn't considered a "visible effect" as far as purity is concerned
       .set_attr<bool>("FPurity", true)
@@ -1353,9 +1354,9 @@ TVM_FFI_STATIC_INIT_BLOCK() {
 
   OpDef("relax.vm.alloc_storage")
       .signature(sig::arg("size", "The size of the storage to allocate."),
-                 sig::arg("runtime_device_index",
-                          "The device index indicating on which device the tensor is "
-                          "to be allocated at runtime."),
+                 sig::arg<IntExpr>("runtime_device_index",
+                                   "The device index indicating on which device the tensor is "
+                                   "to be allocated at runtime."),
                  sig::arg("dtype", "The dtype of the tensor to allocate."),
                  sig::arg("storage_scope",
                           "The storage scope of the storage to allocate. Default is global."))
@@ -1406,12 +1407,12 @@ Type InferTypeVMAllocTensor(const Call& call, const BlockBuilder& ctx) {
 TVM_FFI_STATIC_INIT_BLOCK() {
   OpDef("relax.vm.alloc_tensor")
       .signature(sig::arg("storage", "The storage to allocate the tensor to."),
-                 sig::arg("offset", "Storage offset to allocate the tensor."),
+                 sig::arg<IntExpr>("offset", "Storage offset to allocate the tensor."),
                  sig::arg("shape", "The shape of the tensor to allocate."),
                  sig::arg("dtype", "The dtype of the tensor to allocate."),
-                 sig::arg("runtime_device_index",
-                          "The device index indicating on which device the tensor is "
-                          "to be allocated at runtime."))
+                 sig::arg<IntExpr>("runtime_device_index",
+                                   "The device index indicating on which device the tensor is "
+                                   "to be allocated at runtime."))
       .set_attr<FInferTypeWithBuilder>("relax.FInferTypeWithBuilder", InferTypeVMAllocTensor)
       // memory allocation isn't considered a "visible effect" as far as purity is concerned
       .set_attr<bool>("FPurity", true)

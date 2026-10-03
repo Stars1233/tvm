@@ -79,7 +79,7 @@ class CodeGenCUDA final : public CodeGenC {
   void Dispatch_(const EvaluateNode* op) final;
   void Dispatch_(const ReturnNode* op) final;
   void Dispatch_(const BindNode* op) final;
-  void DispatchAllocBuffer(const BindNode* op, const CallNode* buffer_call);
+  void DispatchAllocTensor(const BindNode* op, const CallNode* buffer_call);
   void Dispatch_(const AttrStmtNode* op) final;
 
   // Target
@@ -124,12 +124,10 @@ class CodeGenCUDA final : public CodeGenC {
   // The name prefix of the cuda::barrier::arrival_token array in registers
   const std::string cuda_barrier_arrival_token_name_ = "cubar_tok";
 
-  std::unordered_map<const VarNode*, std::string> fragment_shapes;
-  std::unordered_map<const VarNode*, std::string> fragment_layouts;
   friend void PrintConst(const FloatImmNode* op, std::ostream& os, CodeGenCUDA* p);
-  void PrintWmmaScope(const std::string& scope, const PrimType& t, const VarNode* variable,
-                      std::ostream& os);
-  int32_t GetWmmaFragmentSize(const std::string& scope, const VarNode* variable, int32_t size);
+  void PrintWmmaScope(const std::string& scope, const PrimType& t, const std::string& shape,
+                      const std::string& layout, std::ostream& os);
+  int32_t GetWmmaFragmentSize(const std::string& scope, const std::string& shape, int32_t size);
 };
 
 }  // namespace codegen
